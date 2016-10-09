@@ -31,7 +31,6 @@ extern int fcntl(int fd, int cmd, ...);
 #else
 #define DEBUG_LOG(...)
 #endif
-
 static void _init() __attribute__((constructor));
 
 typedef ssize_t (*glibc_open)(const char*, int, mode_t);
@@ -105,6 +104,7 @@ static bool is_inject_target() {
   char exe[1024];
   char *base;
   ssize_t ret;
+  char *targets=NULL;
 
   ret = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
   if (ret == -1) {
@@ -113,7 +113,7 @@ static bool is_inject_target() {
   exe[ret] = 0;
   base = basename(exe);
   
-  char *targets = getenv(INJECT_TARGETS);
+  targets = getenv(INJECT_TARGETS);
   if (targets) {
     char *target = strtok(targets, ":");
 
@@ -124,9 +124,9 @@ static bool is_inject_target() {
 
       target = strtok(NULL, ":");
     }
+	return false;
   }
-
-  return false;
+  return true;
 }
 
 static bool startswith(const char *line, const char *pref)
@@ -218,47 +218,14 @@ bool cgfs_get_value(const char *controller, const char *cgroup, const char *file
   return *value != NULL;
 }
 
-static void stripnewline(char *x)
-{
-  size_t l = strlen(x);
-  if (l && x[l-1] == '\n')
-    x[l-1] = '\0';
-}
 
 static char* get_cgroup(char *control) {
-  FILE *f;
-  char *answer = NULL;
-  char *line = NULL;
-  size_t len = 0;
-
-  if (!(f = safe_fopen_r("/proc/self/cgroup")))
-    return NULL;
-
-  while (getline(&line, &len, f) != -1) {
-    char *c1, *c2;
-    if (!line[0])
-      continue;
-    c1 = strchr(line, ':');
-    if (!c1)
-      goto out;
-    c1++;
-    c2 = strchr(c1, ':');
-    if (!c2)
-      goto out;
-    *c2 = '\0';
-    if (strcmp(c1, control) != 0)
-      continue;
-    c2++;
-    stripnewline(c2);
-    do {
-      answer = strdup(c2);
-    } while (!answer);
-    break;
+  char *answer=NULL;
+  answer = getenv("CGROUP_DIR");
+  if (!answer){
+  	answer=(char*)calloc(1,   sizeof(char*) ); 
+  	strcpy( answer,"/"); 
   }
-
- out:
-  fclose(f);
-  free(line);
   return answer;
 }
 
@@ -376,7 +343,7 @@ typedef struct {
 
 static bool get_container_meminfo(meminfo *info, unsigned int unit) {
   bool ret = false;
-  char *cg;
+  char *cg=NULL;
 
   char *memusage_str = NULL, *memstat_str = NULL,
     *memswlimit_str = NULL, *memswusage_str = NULL,
@@ -915,6 +882,11 @@ static void get_blkio_io_value(char *str, unsigned major, unsigned minor, char *
 {
   char *eol;
   char key[32];
+  char *tmp_str;
+  char *tmp_start;
+  tmp_str=malloc(strlen(str));
+  tmp_start=tmp_str;
+  memcpy(tmp_str,str,strlen(str));
 
   memset(key, 0, 32);
   snprintf(key, 32, "%u:%u %s", major, minor, iotype);
@@ -922,16 +894,18 @@ static void get_blkio_io_value(char *str, unsigned major, unsigned minor, char *
   size_t len = strlen(key);
   *v = 0;
 
-  while (*str) {
-    if (startswith(str, key)) {
-      sscanf(str + len, "%lu", v);
-      return;
+  while (*tmp_str) {
+    if (startswith(tmp_str, key)) {
+      sscanf(tmp_str + len, "%lu", v);
+	  break;
     }
-    eol = strchr(str, '\n');
+    eol = strchr(tmp_str, '\n');
     if (!eol)
-      return;
-    str = eol+1;
+      break;
+    tmp_str = eol+1;
   }
+  DEBUG_LOG(tmp_start,major,minor,v);
+  free(tmp_start);
 }
 
 static int flush_proc_diskstats(FILE *f) {
@@ -976,7 +950,6 @@ static int flush_proc_diskstats(FILE *f) {
   while (getline(&line, &linelen, sourcef) != -1) {
     size_t l;
     char *printme, lbuf[256];
-
     i = sscanf(line, "%u %u %71s", &major, &minor, dev_name);
     if(i == 3){
       get_blkio_io_value(io_serviced_str, major, minor, "Read", &read);
@@ -1005,7 +978,6 @@ static int flush_proc_diskstats(FILE *f) {
     }else{
       continue;
     }
-
     memset(lbuf, 0, 256);
     if (read || write || read_merged || write_merged || read_sectors || write_sectors || read_ticks || write_ticks) {
       snprintf(lbuf, 256, "%u       %u %s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",

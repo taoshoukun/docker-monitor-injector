@@ -18,11 +18,7 @@ What make the diffrence of this project is that it take usage of LD_PRELOAD to e
 
   * run a container with required volumes and get right metric
   
-        > docker run -ti --rm -v <inject.so>:/usr/lib/inject.so -v /sys/fs/cgroup:/sys/fs/cgroup:ro ubuntu bash
-		> # in container
-		> export CONTAINER_PROC_INJECT_TARGETS=free:top:uptime
-		> export LD_PRELOAD=/usr/lib/inject.so
-		> uptime
+	pls rpmbuild and install rpm
 
 # Progress
   * (**DONE**)open, fopen, and lseek on /proc/uptime
