@@ -18,7 +18,7 @@ What make the diffrence of this project is that it take usage of LD_PRELOAD to e
 
   * run a container with required volumes and get right metric
   
-	pls rpmbuild and install rpm
+	pls rpmbuild and install rpm in docker container 
 
 # Progress
   * (**DONE**)open, fopen, and lseek on /proc/uptime
